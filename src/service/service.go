@@ -4,10 +4,10 @@ import (
 	"encoding/xml"
 	"flag"
 	"io/ioutil"
-	"ipadgrpc/src/common/database"
-	"ipadgrpc/src/common/database/mongodb"
 	"log"
 	"os"
+	"qcengine/src/common/database"
+	"qcengine/src/common/database/mongodb"
 	"strconv"
 )
 

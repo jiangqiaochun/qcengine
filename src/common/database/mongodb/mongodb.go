@@ -3,12 +3,14 @@ package mongodb
 import (
 	"context"
 	"errors"
+	"github.com/mongodb/mongo-go-driver/bson/primitive"
 	"github.com/mongodb/mongo-go-driver/mongo"
-	"ipadgrpc/src/common/database"
-	"ipadgrpc/src/common/databaseatabase"
-	"log"
+	"gopkg.in/mgo.v2/bson"
+	"qcengine/src/common/database"
 	"reflect"
 	"strconv"
+	"strings"
+	"time"
 )
 
 type MongoSession struct {
@@ -21,12 +23,12 @@ func NewMongoDataBase(config *database.DatabaseConfig) *MongoSession {
 	mongoSession.Init(config)
 	return mongoSession
 }
-func (this *MongoSession) Init(config *database.DatabaseConfig) *MongoSession {
-	this.config = config
-	return this
+func (mgs *MongoSession) Init(config *database.DatabaseConfig) *MongoSession {
+	mgs.config = config
+	return mgs
 }
-func (this *MongoSession) Connect() error {
-	config := this.config
+func (mgs *MongoSession) Connect() error {
+	config := mgs.config
 	url := "mongodb://"
 	if config.UserName != "" {
 		url += config.UserName + ":" + config.Password + "@"
@@ -39,26 +41,121 @@ func (this *MongoSession) Connect() error {
 	if error != nil {
 		return error
 	}
-	this.client = client
-	error = this.client.Connect(context.Background())
+	mgs.client = client
+	error = mgs.client.Connect(context.Background())
 	if error != nil {
 		return error
 	}
-	this.database = this.client.Database(config.DataBaseName)
-	if this.database == nil {
+	mgs.database = mgs.client.Database(config.DataBaseName)
+	if mgs.database == nil {
 		return errors.New("连接到"+config.DataBaseName+"失败")
 	}
 	return nil
 }
 
-func (this *MongoSession) collectionNameForObject(object interface{}) *mongo.Collection {
+func (mgs *MongoSession) collectionNameForObject(object interface{}) *mongo.Collection {
 	targetType := reflect.TypeOf(object)
-	collectionName := targetType.Elem().Name()
-	return this.database.Collection(collectionName)
+	modelName := targetType.Elem().Name()
+	collectionName := strings.ToLower(modelName)
+	return mgs.database.Collection(collectionName)
 }
 
-func (this *MongoSession) Insert(object interface{}) error {
-	collection := this.collectionNameForObject(object)
-	collection.InsertOne(context.Background(), object)
+func (mgs *MongoSession) makeContext() context.Context {
+	content, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	return content
+}
+
+func (mgs *MongoSession) Insert(object interface{}) (interface{}, error) {
+	collection := mgs.collectionNameForObject(object)
+	ctx := mgs.makeContext()
+	res, err := collection.InsertOne(ctx, object)
+	if err != nil {
+		return nil, err
+	}
+	return res.InsertedID, nil
+}
+
+func (mgs *MongoSession) Delete(object interface{}) error {
+	collection := mgs.collectionNameForObject(object)
+	ctx := mgs.makeContext()
+	data, err := mgs.structToMap(object)
+	if err != nil {
+		return err
+	}
+	_, err = collection.DeleteMany(ctx, data)
+	return err
+}
+
+func (mgs *MongoSession) Update(object interface{}) error {
+	collection := mgs.collectionNameForObject(object)
+	ctx := mgs.makeContext()
+	data, err := mgs.structToMap(object)
+	if err != nil {
+		return err
+	}
+	id := data["_id"]
+	delete(data, "_id")
+	_, err = collection.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": data})
+	if err != nil {
+		return err
+	}
 	return nil
+}
+
+func (mgs *MongoSession) Find(object interface{}) (interface{}, error) {
+	collection := mgs.collectionNameForObject(object)
+	ctx := mgs.makeContext()
+	data, err := mgs.structToMap(object)
+	if err != nil {
+		return nil, err
+	}
+	if id, ok := data["_id"]; ok {
+		// 根据ID查找
+		res := collection.FindOne(ctx, bson.M{"_id": id})
+		output := reflect.New(reflect.TypeOf(object).Elem())
+		err = res.Decode(output.Interface())
+		return output.Interface(), err
+	} else {
+		// 查找多个
+		res, err := collection.Find(ctx, data)
+		if err != nil {
+			return nil, err
+		}
+		s := make([]interface{}, 0)
+		for res.Next(ctx) {
+			if res.Err() != nil {
+				return nil, res.Err()
+			}
+			output := reflect.New(reflect.TypeOf(object).Elem())
+			err = res.Decode(output.Interface())
+			if err != nil {
+				return nil, err
+			}
+			s = append(s, output.Interface())
+		}
+		return s, nil
+	}
+}
+
+func (mgs *MongoSession) structToMap(object interface{}) (map[string]interface{}, error) {
+	output := make(map[string]interface{}, 0)
+	bytes, err := bson.Marshal(object)
+	if err != nil {
+		return nil, err
+	}
+	err = bson.Unmarshal(bytes, &output)
+	if err != nil {
+		return nil, err
+	}
+	if id, ok := output["_id"]; ok {
+		if idString, ok := id.(string); ok {
+			objectID, error := primitive.ObjectIDFromHex(idString)
+			if error == nil {
+				output["_id"] = objectID
+			} else {
+				return nil, err
+			}
+		}
+	}
+	return output, nil
 }

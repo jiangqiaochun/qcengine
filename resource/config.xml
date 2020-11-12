@@ -3,5 +3,6 @@
         <type>mongodb</type>
         <host>127.0.0.1</host>
         <port>27017</port>
+        <databaseName>test</databaseName>
     </database>
 </config>

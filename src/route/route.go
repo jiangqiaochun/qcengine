@@ -2,11 +2,13 @@ package route
 
 import (
 	"github.com/gin-gonic/gin"
-	"ipadgrpc/src/controller"
+	"qcengine/src/controller"
 )
 
 func StartApi(route *gin.RouterGroup) {
-	route.POST("/users", func(context *gin.Context) {
-		controller.CreateUser(context)
-	})
+	route.POST("/users", controller.CreateUser)
+	route.DELETE("/users/:id", controller.DeleteUser)
+	route.PUT("/users/:id", controller.UpdateUser)
+	route.GET("/users/:id", controller.FindUser)
+	route.GET("/users", controller.FindUser)
 }
