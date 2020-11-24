@@ -13,21 +13,26 @@ import (
 	"time"
 )
 
-type MongoSession struct {
+type MongoHeader struct {
+	database.DataBase
 	client *mongo.Client
 	database *mongo.Database
 	config *database.DatabaseConfig
+}
+
+type MongoSession struct {
+	*MongoHeader
 }
 func NewMongoDataBase(config *database.DatabaseConfig) *MongoSession {
 	mongoSession := new(MongoSession)
 	mongoSession.Init(config)
 	return mongoSession
 }
-func (mgs *MongoSession) Init(config *database.DatabaseConfig) *MongoSession {
+func (mgs *MongoHeader) Init(config *database.DatabaseConfig) *MongoHeader {
 	mgs.config = config
 	return mgs
 }
-func (mgs *MongoSession) Connect() error {
+func (mgs *MongoHeader) Connect() error {
 	config := mgs.config
 	url := "mongodb://"
 	if config.UserName != "" {
@@ -53,14 +58,14 @@ func (mgs *MongoSession) Connect() error {
 	return nil
 }
 
-func (mgs *MongoSession) collectionNameForObject(object interface{}) *mongo.Collection {
+func (mgs *MongoHeader) collectionNameForObject(object interface{}) *mongo.Collection {
 	targetType := reflect.TypeOf(object)
 	modelName := targetType.Elem().Name()
 	collectionName := strings.ToLower(modelName)
 	return mgs.database.Collection(collectionName)
 }
 
-func (mgs *MongoSession) makeContext() context.Context {
+func (mgs *MongoHeader) makeContext() context.Context {
 	content, _ := context.WithTimeout(context.Background(), 10*time.Second)
 	return content
 }
@@ -137,7 +142,7 @@ func (mgs *MongoSession) Find(object interface{}) (interface{}, error) {
 	}
 }
 
-func (mgs *MongoSession) structToMap(object interface{}) (map[string]interface{}, error) {
+func (mgs *MongoHeader) structToMap(object interface{}) (map[string]interface{}, error) {
 	output := make(map[string]interface{}, 0)
 	bytes, err := bson.Marshal(object)
 	if err != nil {

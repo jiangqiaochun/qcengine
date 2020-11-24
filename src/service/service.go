@@ -15,12 +15,12 @@ var config = new(Config)
 
 type Config struct {
 	XMLName        xml.Name                 `xml:"config"`
-	DatabaseConfig *database.DatabaseConfig `xml:"database"`
+	DatabaseConfig *database.DatabaseConfig `xml:"iDatabase"`
 }
 
 type Service struct {
-	//mongodatabase *database.DatabaseConfig
-	mongodatabase *mongodb.MongoSession
+	//iDatabase *iDatabase.DatabaseConfig
+	iDatabase database.IDataBase
 }
 
 func  init() {
@@ -44,13 +44,17 @@ func  init() {
 	}
 }
 
-func (this *Service) DataBase() *mongodb.MongoSession {
-	if this.mongodatabase == nil {
+func (this *Service) DataBase() database.IDataBase {
+	if this.iDatabase == nil {
 		newConfig := new(database.DatabaseConfig)
-		if newConfig == nil {
+		initialConfig := config.DatabaseConfig
+		if initialConfig == nil {
 			return nil
 		}
-		initialConfig := config.DatabaseConfig
+		databaseType := initialConfig.Type
+		if databaseType == "" {
+			return nil
+		}
 		hostName := initialConfig.HostName
 		if hostName == "" {
 			hostName = os.Getenv("DATABASE_HOST")
@@ -85,9 +89,9 @@ func (this *Service) DataBase() *mongodb.MongoSession {
 		newConfig.DataBaseName = databaseName
 		mongosession := mongodb.NewMongoDataBase(newConfig)
 		mongosession.Connect()
-		this.mongodatabase = mongosession
+		this.iDatabase = mongosession
 	}
-	return this.mongodatabase
+	return this.iDatabase
 }
 
 
